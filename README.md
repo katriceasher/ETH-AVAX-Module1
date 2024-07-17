@@ -1,35 +1,30 @@
-# Donation Contract
+# Task Manager
 
 ## Overview
 
-The `Donation` smart contract is designed to facilitate transparent and decentralized fundraising on the Ethereum blockchain. Users can contribute ETH towards a specified goal, and the contract owner can withdraw the funds once the goal is achieved.
+The TaskManager application is a task management system built on the Ethereum blockchain. It includes a Solidity smart contract for backend logic and a React frontend for user interaction. The application allows users to add, update, and remove tasks, with all data stored on the blockchain.
 
 ## Features
 
-- **Set Contribution Goal:** The contract owner can define a fundraising goal.
-- **Contribute ETH:** Users can contribute ETH towards the goal.
-- **Withdraw Funds:** The contract owner can withdraw the funds once the goal is met.
-- **Event Logging:** Events are emitted for key actions such as contributions, goal definition, and fund extraction.
+- **Add Task:** Create a new task with a description.
+- **Change Task Status:** Toggle the completion status of a task.
+- **Remove Task:** Delete a task from the task list.
+- **Retrieve Tasks:** Get details of individual tasks.
+- **Retrieve Total Tasks:** Get the total number of tasks.
 
 ## Functionality
 
-### Define Contribution Goal
-
-The contract owner sets a fundraising goal using the `defineGoal` function. This goal must be greater than zero.
-
-### Contribute ETH
-
-Users can contribute ETH to the contract using the `contribute` function. Contributions must be greater than zero. The total contributions are tracked by the contract.
-
-### Withdraw Funds
-
-Once contributions have been made, the contract owner can withdraw the funds using the `extractFunds` function. The total contributions are reset to zero upon withdrawal.
+- **Add Task:** Allows users to add new tasks with descriptions.
+- **Change Task Status:** Users can mark tasks as completed or pending.
+- **Remove Task:** Users can delete tasks.
+- **Retrieve Tasks:** Fetch details of tasks including ID, description, and status.
+- **Retrieve Total Tasks:** Fetch the total number of tasks in the system.
 
 ## Events
 
-- **ContributionReceived:** Emitted when a contribution is received. Includes the contributor's address and the amount contributed.
-- **FundsExtracted:** Emitted when the contract owner withdraws funds. Includes the amount withdrawn.
-- **GoalDefined:** Emitted when the contribution goal is set. Includes the goal amount.
+- TaskAdded: Emitted when a new task is added.
+- TaskStatusChanged: Emitted when a task's status is changed.
+- TaskRemoved: Emitted when a task is removed.
 
 ## Solidity Version
 
