@@ -1,167 +1,341 @@
-import { useState, useEffect } from "react";  // Importing necessary hooks from React
-import { ethers } from "ethers";  // Importing ethers library for Ethereum interactions
-import CharityDonationABI from "../artifacts/contracts/CharityDonation.sol/CharityDonation.json";  // Importing ABI of the smart contract
+import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import taskManagerAbi from "../artifacts/contracts/TaskManager.sol/TaskManager.json";
 
-export default function HomePage() {
-  const [account, setAccount] = useState(null);  // State variable to store current Ethereum account
-  const [contract, setContract] = useState(null);  // State variable to store instance of the smart contract
-  const [balance, setBalance] = useState("0");  // State variable to store balance of contributions
+export default function TaskManagerApp() {
+  const [ethWallet, setEthWallet] = useState(undefined);
+  const [account, setAccount] = useState(undefined);
+  const [taskManager, setTaskManager] = useState(undefined);
+  const [tasks, setTasks] = useState([]);
+  const [newTask, setNewTask] = useState("");
 
-  const contractAddress = "0x5fbdb2315678afecb367f032d93f642f64180aa3";  // Address of the deployed smart contract
-  const CharityDonation_ABI = CharityDonationABI.abi;  // ABI (Application Binary Interface) of the smart contract
+  const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+  const taskManagerABI = taskManagerAbi.abi;
 
   useEffect(() => {
-    // Function to initialize contract and account information
-    const initialize = async () => {
-      try {
-        if (window.ethereum) {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);  // Create Web3 provider using MetaMask
-          const signer = provider.getSigner();  // Get the signer (account) from the provider
-          const contractInstance = new ethers.Contract(contractAddress, CharityDonation_ABI, signer);  // Create contract instance
-          setContract(contractInstance);  // Set the contract instance in state
-  
-          const accounts = await provider.listAccounts();  // Retrieve list of accounts connected to MetaMask
-          if (accounts.length > 0) {
-            setAccount(accounts[0]);  // Set the first account as the current account
-          }
-  
-          const balance = await contractInstance.totalContribution();  // Retrieve total contribution balance from the contract
-          setBalance(ethers.utils.formatEther(balance));  // Format the balance to Ether and update state
-        }
-      } catch (error) {
-        console.error("Error initializing:", error);  // Log any errors that occur during initialization
-      }
-    };
-  
-    initialize();  // Call the initialization function when component mounts
-  }, []);  // Empty dependency array ensures useEffect runs only once on component mount
+    getWallet();
+  }, []);
 
-  // Function to connect to MetaMask wallet
-  const connectWallet = async () => {
+  const getWallet = async () => {
     try {
-      await window.ethereum.request({ method: "eth_requestAccounts" });  // Request access to user's MetaMask accounts
-      const provider = new ethers.providers.Web3Provider(window.ethereum);  // Create Web3 provider
-      const accounts = await provider.listAccounts();  // Retrieve updated list of accounts
-      if (accounts.length > 0) {
-        setAccount(accounts[0]);  // Set the first account as the current account
+      if (window.ethereum) {
+        setEthWallet(window.ethereum);
+        const accounts = await window.ethereum.request({ method: "eth_accounts" });
+        handleAccount(accounts);
+      } else {
+        console.log("Please install MetaMask");
       }
     } catch (error) {
-      console.error("Error connecting to MetaMask:", error);  // Log any errors that occur during connection
-    }
-  };
-  
-  // Function to contribute ETH to the smart contract
-  const contribute = async (amount) => {
-    if (contract) {
-      try {
-        const tx = await contract.contribute({
-          value: ethers.utils.parseEther(amount.toString())  // Convert amount to wei and send with the transaction
-        });
-        await tx.wait();  // Wait for transaction to be mined
-        const newBalance = await contract.totalContribution();  // Retrieve updated total contribution balance
-        setBalance(ethers.utils.formatEther(newBalance));  // Format the new balance to Ether and update state
-      } catch (error) {
-        console.error("Error contributing:", error);  // Log any errors that occur during contribution
-      }
+      console.error("Error getting wallet:", error);
     }
   };
 
-  // Function to extract funds from the smart contract (only accessible to contract owner)
-  const extractFunds = async () => {
-    if (contract) {
-      try {
-        const tx = await contract.extractFunds();  // Call the smart contract function to withdraw funds
-        await tx.wait();  // Wait for transaction to be mined
-        const newBalance = await contract.totalContribution();  // Retrieve updated total contribution balance
-        setBalance(ethers.utils.formatEther(newBalance));  // Format the new balance to Ether and update state
-      } catch (error) {
-        console.error("Error extracting funds:", error);  // Log any errors that occur during fund extraction
+  const handleAccount = (accounts) => {
+    try {
+      if (accounts.length > 0) {
+        setAccount(accounts[0]);
+        getTaskManagerContract();
+      } else {
+        console.log("No accounts found");
       }
+    } catch (error) {
+      console.error("Error handling account:", error);
     }
   };
 
-  // JSX rendering for the UI
+  const connectAccount = async () => {
+    try {
+      if (!ethWallet) {
+        alert("MetaMask wallet is required to connect");
+        return;
+      }
+
+      const accounts = await ethWallet.request({ method: "eth_requestAccounts" });
+      handleAccount(accounts);
+    } catch (error) {
+      console.error("Error connecting account:", error);
+    }
+  };
+
+  const getTaskManagerContract = async () => {
+    try {
+      let provider;
+      if (ethWallet) {
+        provider = new ethers.providers.Web3Provider(ethWallet);
+      } else {
+        provider = new ethers.providers.JsonRpcProvider("http://localhost:8545");
+      }
+
+      const signer = provider.getSigner();
+      const taskManagerContract = new ethers.Contract(contractAddress, taskManagerABI, signer);
+      setTaskManager(taskManagerContract);
+      loadTasks(taskManagerContract);
+    } catch (error) {
+      console.error("Error getting contract:", error);
+    }
+  };
+
+  const loadTasks = async (taskManagerContract) => {
+    try {
+      const taskCount = await taskManagerContract.totalTasks();
+      const tasks = [];
+      for (let i = 1; i <= taskCount; i++) {
+        const task = await taskManagerContract.taskList(i);
+        if (!task.deleted) { // Only add tasks that are not marked as deleted
+          tasks.push(task);
+        }
+      }
+      setTasks(tasks);
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    }
+  };
+
+  const addTask = async () => {
+    try {
+      if (newTask.trim() === "") return;
+
+      if (taskManager) {
+        const tx = await taskManager.addTask(newTask, { gasLimit: 3000000 });
+        await tx.wait();
+        loadTasks(taskManager);
+        setNewTask("");
+      }
+    } catch (error) {
+      console.error("Error adding task:", error.message);
+    }
+  };
+
+  const changeTaskStatus = async (id) => {
+    try {
+      if (taskManager) {
+        const tx = await taskManager.changeTaskStatus(id, { gasLimit: 3000000 });
+        await tx.wait();
+        loadTasks(taskManager);
+      }
+    } catch (error) {
+      console.error("Error changing task status:", error.message);
+    }
+  };
+
+  const removeTask = async (id) => {
+    try {
+      if (taskManager) {
+        const tx = await taskManager.removeTask(id, { gasLimit: 3000000 });
+        await tx.wait();
+        // After deletion, filter out the deleted task from state
+        setTasks(tasks.filter(task => task.taskId !== id));
+      }
+    } catch (error) {
+      console.error("Error removing task:", error.message);
+    }
+  };
+
+  const taskList = tasks.map((task) => (
+    <li key={task.taskId} className="task-item">
+      <div className="task-details">
+        <span className="task-content">{task.taskDescription}</span>
+        &emsp;|&emsp;
+        <span className={`task-status ${task.isCompleted ? "completed" : "pending"}`}>
+          {task.isCompleted ? "Completed" : "Pending"}
+        </span>
+      </div>
+      <div className="task-actions">
+        <button onClick={() => changeTaskStatus(task.taskId)}>
+          {task.isCompleted ? "Mark Incomplete" : "Mark Complete"}
+        </button>
+        <button onClick={() => removeTask(task.taskId)}>Delete</button>
+      </div>
+    </li>
+  ));
+
   return (
     <main className="container">
       <header>
-        <h1>Donate ETH Today!</h1>
+        <h1>Blockchain Task Manager</h1>
       </header>
-      {!account && (
-        <button className="connect-button" onClick={connectWallet}>Connect to MetaMask</button>
-      )}
-      {account && (
-        <div className="account-info">
-          <p>Your Account: {account}</p>
-          <p>Total Contribution: {balance} ETH</p>
-          <div className="buttons">
-            <button className="contribute-button" onClick={() => contribute(1)}>Contribute 1 ETH</button>
-            <button className="extract-button" onClick={extractFunds}>Extract Funds</button>
+      {ethWallet ? (
+        account ? (
+          <div>
+            <input
+              type="text"
+              value={newTask}
+              onChange={(e) => setNewTask(e.target.value)}
+              placeholder="Enter new task"
+              className="input-task"
+            />
+            <button onClick={addTask} className="btn-add-task">
+              Add Task
+            </button>
+            <ul className="task-list">
+              {taskList.length > 0 ? taskList : <li>No tasks found</li>}
+            </ul>
           </div>
-        </div>
+        ) : (
+          <button onClick={connectAccount} className="btn-connect">
+            Connect MetaMask
+          </button>
+        )
+      ) : (
+        <p>Connecting to the local network...</p>
       )}
-      <style jsx>{`
-  .container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    background: linear-gradient(135deg, #e0eafc 0%, #cfdef3 100%);
-    font-family: 'Courier New', monospace;
-  }
-  header {
-    margin-bottom: 2rem;
-    text-align: center;
-  }
-  h1 {
-    font-size: 3rem;
-    color: #222;
-    margin-bottom: 0.5rem;
-  }
-  .connect-button,
-  .contribute-button,
-  .extract-button {
-    padding: 1rem 2rem;
-    margin: 0.5rem;
-    font-size: 1.2rem;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    transition: background 0.3s ease;
-  }
-  .connect-button {
-    background-color: #ff5733;
-    color: #fff;
-  }
-  .connect-button:hover {
-    background-color: #e0462a;
-  }
-  .account-info {
-    text-align: center;
-  }
-  .buttons {
-    margin-top: 1rem;
-  }
-  .contribute-button {
-    background-color: #3498db;
-    color: #fff;
-  }
-  .contribute-button:hover {
-    background-color: #2980b9;
-  }
-  .extract-button {
-    background-color: #f39c12;
-    color: #fff;
-  }
-  .extract-button:hover {
-    background-color: #d68910;
-  }
-  p {
-    font-size: 1.2rem;
-    color: #444;
-    margin: 0.5rem 0;
-  }
-`}</style>
+     <style jsx>{`
+        .container {
+          text-align: center;
+          margin-top: 50px;
+          font-family: 'Arial', sans-serif;
+          color: #333;
+        }
+
+        header {
+          background-color: #007bff;
+          color: white;
+          padding: 20px;
+          border-radius: 5px;
+        }
+
+        h1 {
+          margin: 0;
+          font-size: 2.5em;
+        }
+
+        .input-task {
+          margin-right: 10px;
+          padding: 10px;
+          width: 300px;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+          font-size: 16px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .btn-add-task {
+          padding: 10px 20px;
+          background-color: #007bff;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 16px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .btn-add-task:hover {
+          background-color: #0056b3;
+          transform: translateY(-2px);
+        }
+
+        .btn-connect {
+          padding: 12px 24px;
+          background-color: #28a745;
+          color: white;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 18px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .btn-connect:hover {
+          background-color: #218838;
+          transform: translateY(-2px);
+        }
+
+        .task-list {
+          list-style: none;
+          padding: 0;
+          margin-top: 20px;
+          max-width: 600px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        .task-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 15px;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+          margin-bottom: 10px;
+          background-color: #f8f9fa;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          transition: transform 0.3s;
+        }
+
+        .task-item:hover {
+          transform: translateY(-2px);
+        }
+
+        .task-details {
+          flex: 1;
+          display: flex;
+          align-items: center;
+        }
+
+        .task-content {
+          flex: 1;
+          font-size: 16px;
+        }
+
+        .task-status {
+          margin-left: 10px;
+          padding: 4px 8px;
+          border-radius: 5px;
+          font-weight: bold;
+          text-transform: uppercase;
+          font-size: 14px;
+        }
+
+        .completed {
+          background-color: #28a745;
+          color: white;
+        }
+
+        .pending {
+          background-color: #ffc107;
+          color: #212529;
+        }
+
+        .task-actions {
+          display: flex;
+          align-items: center;
+        }
+
+        .task-actions button {
+          margin-left: 8px;
+          padding: 8px 12px;
+          border: none;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 14px;
+          transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .task-actions button:hover {
+          transform: translateY(-2px);
+        }
+
+        .task-actions button:first-child {
+          background-color: #007bff;
+          color: white;
+        }
+
+        .task-actions button:first-child:hover {
+          background-color: #0056b3;
+        }
+
+        .task-actions button:last-child {
+          background-color: #dc3545;
+          color: white;
+        }
+
+        .task-actions button:last-child:hover {
+          background-color: #c82333;
+        }
+      `}</style>
     </main>
   );
 }
